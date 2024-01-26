@@ -31,6 +31,14 @@ static struct ThreadArgs{
     CreateAssistant * t_create_assistant;
 } ThreadArgsI;
 
+static struct ThreadArgsDS{
+    SciStore::Storage<> * t_storage;
+    std::string datadir;
+    bool recursive_scan;
+    bool includeprefix;
+    int charcount;
+} ThreadArgsDSI;
+
 class StoreChoiceWindow : public Gtk::Window
 {
     public:
@@ -75,7 +83,8 @@ class StoreChoiceWindow : public Gtk::Window
         int get_charcount();
         bool get_portable();
         
-        void on_file_dialog_response(int response_id, Gtk::FileChooserDialog* dialog);
+        void on_file_in_dialog_response(int response_id, Gtk::FileChooserDialog* m_dir_inD);
+        void on_file_out_dialog_response(int response_id, Gtk::FileChooserDialog* m_dir_outD);
         void on_select_folder_in();
         void on_select_folder_out();
 };

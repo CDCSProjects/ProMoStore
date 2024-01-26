@@ -3,7 +3,9 @@
 
 StoreChoiceWindow::StoreChoiceWindow(){
     
-    m_TextL.set_label("Lorem Ipsum\n");
+    m_TextL.set_label("Please note that the creation of a DataStore can take some time, up to several hours depending on the speed of your drive.\n");
+    m_TextL.set_line_wrap(true);
+    m_TextL.set_width_chars(30);
     m_OkB.add_label("Start");
     m_CancelB.add_label("Cancel");
     m_OkB.signal_clicked().connect(sigc::mem_fun(*this, &StoreChoiceWindow::on_button_clicked));
@@ -11,19 +13,26 @@ StoreChoiceWindow::StoreChoiceWindow(){
     m_inL.set_label("Select the folder containing your assets");   
     m_inL.set_halign(Gtk::ALIGN_START);
     m_InB.add_label("Select");
+    m_InB.signal_clicked().connect(sigc::mem_fun(*this, &StoreChoiceWindow::on_select_folder_in));
     m_dir_inL.set_label("No directory selected\n");
     m_outL.set_label("Where do you want the local DataStore to be created?");  
     m_outL.set_halign(Gtk::ALIGN_START); 
     m_OutB.add_label("Select");    
+    m_OutB.signal_clicked().connect(sigc::mem_fun(*this, &StoreChoiceWindow::on_select_folder_out));
     m_dir_outL.set_label("No directory selected\n");
     m_nameL.set_label("Chose a name for the DataStore");
+    m_nameL.set_halign(Gtk::ALIGN_START); 
     m_scanrecursiveL.set_label("Scan directory recursively?");
+    m_scanrecursiveL.set_halign(Gtk::ALIGN_START); 
     m_prefixL.set_label("Does the filename have a prefix?");
+    m_prefixL.set_halign(Gtk::ALIGN_START); 
     m_charcountL.set_label("How many characters?");
+    m_charcountL.set_halign(Gtk::ALIGN_START); 
     m_charcountL.set_visible(false);
+    m_charcountL.set_halign(Gtk::ALIGN_START); 
     m_charcount.set_visible(false);
     m_portableL.set_label("Create portable Asset Store?");
-    m_nameL.set_label("Provide a name for your Asset store: ");
+    m_portableL.set_halign(Gtk::ALIGN_START); 
     
     m_charcount.set_increments (1, 1);
     m_charcount.set_range(1, 9);
@@ -44,7 +53,9 @@ StoreChoiceWindow::StoreChoiceWindow(){
     m_grid.attach_next_to(m_prefix,m_prefixL,Gtk::POS_RIGHT);
     m_grid.attach_next_to(m_charcountL,m_prefixL,Gtk::POS_BOTTOM);
     m_grid.attach_next_to(m_charcount,m_charcountL,Gtk::POS_RIGHT);
-    m_grid.attach_next_to(m_nameL,m_charcountL,Gtk::POS_BOTTOM);
+    m_grid.attach_next_to(m_scanrecursiveL,m_charcountL,Gtk::POS_BOTTOM);
+    m_grid.attach_next_to(m_scanrecursive,m_scanrecursiveL,Gtk::POS_RIGHT);
+    m_grid.attach_next_to(m_nameL,m_scanrecursiveL,Gtk::POS_BOTTOM);
     m_grid.attach_next_to(m_name,m_nameL,Gtk::POS_RIGHT);
     
    // m_grid.attach_next_to(m_CancelB,m_charcountL,Gtk::POS_BOTTOM); 
@@ -58,7 +69,31 @@ StoreChoiceWindow::~StoreChoiceWindow(){
 
 }
 
+void *importDS(void *arg)
+{
+        struct ThreadArgsDS *ta = (ThreadArgsDS*) arg;
+        auto p_storage = ta->t_storage;
+        std::cout << "in thread dir: " << ta->datadir << std::endl;
+        storage->load_assets_from_directory(ta->datadir, 0, ta->recursive_scan ? 1 : 0, 0, 0, ta->includeprefix ? ta->charcount : 0);
+        pthread_exit(NULL);
+}
+
 void StoreChoiceWindow::on_button_clicked(){
+    std::cout << m_dir_in << std::endl;
+    std::filesystem::create_directory(m_dir_out +"/"+ get_name());
+    storage = new SciStore::Storage<>(m_dir_out +"/"+ get_name(), "");
+        
+    //Let import be done in a separate Thread
+    pthread_t import_thread;
+    ThreadArgsDS ta;
+    ta.t_storage = storage;
+    ta.datadir = m_dir_in;
+    ta.recursive_scan = get_recursivescan();
+    ta.includeprefix = get_includeprefix();
+    ta.charcount = get_charcount();
+    pthread_create(&import_thread, NULL, &importDS, (void*) &ta);
+    int res;
+    pthread_join(import_thread, (void **)&res);
 
 }
 
@@ -67,13 +102,77 @@ void StoreChoiceWindow::on_button_cancel_clicked(){
 }
 
 void StoreChoiceWindow::on_select_folder_in(){
+    m_dir_inD= new Gtk::FileChooserDialog("Please select the folder containing your assets", Gtk::FileChooserAction::FILE_CHOOSER_ACTION_SELECT_FOLDER);
+    m_dir_inD->add_button("_Cancel", Gtk::RESPONSE_CANCEL);
+    m_dir_inD->add_button("_Open", Gtk::RESPONSE_OK);
+    m_dir_inD->set_transient_for(*this);
+    m_dir_inD->set_modal(true);
+    m_dir_inD->signal_response().connect(sigc::bind(sigc::mem_fun(*this, &StoreChoiceWindow::on_file_in_dialog_response), m_dir_inD));
+    m_dir_inD->show();
 }
 
 void StoreChoiceWindow::on_select_folder_out(){
+    m_dir_outD= new Gtk::FileChooserDialog("Please select where you want your local DataStore to be", Gtk::FileChooserAction::FILE_CHOOSER_ACTION_SELECT_FOLDER);
+    m_dir_outD->add_button("_Cancel", Gtk::RESPONSE_CANCEL);
+    m_dir_outD->add_button("_Open", Gtk::RESPONSE_OK);
+    m_dir_outD->set_transient_for(*this);
+    m_dir_outD->set_modal(true);
+    m_dir_outD->signal_response().connect(sigc::bind(sigc::mem_fun(*this, &StoreChoiceWindow::on_file_out_dialog_response), m_dir_outD));
+    m_dir_outD->show();
 
 }
 
-void StoreChoiceWindow::on_file_dialog_response(int response_id, Gtk::FileChooserDialog* dialog){
+void StoreChoiceWindow::on_file_in_dialog_response(int response_id, Gtk::FileChooserDialog* m_dir_inD){
+  switch (response_id)
+  {
+    case Gtk::RESPONSE_OK:
+    {
+        auto filename = m_dir_inD->get_file()->get_path();
+        std::cout << "Folder selected: " <<  filename << std::endl;
+        m_dir_in = filename;
+        m_dir_inL.set_label(m_dir_in);
+        break;
+    }
+    case Gtk::RESPONSE_CANCEL:
+    {
+      std::cout << "Cancel clicked." << std::endl;
+       
+        break;
+    }
+    default:
+    {
+        std::cout << "Unexpected button clicked." << std::endl;
+        break;
+    }
+  }
+   delete m_dir_inD;
+  
+}
+
+void StoreChoiceWindow::on_file_out_dialog_response(int response_id, Gtk::FileChooserDialog* m_dir_outD){
+  switch (response_id)
+  {
+    case Gtk::RESPONSE_OK:
+    {
+        auto filename = m_dir_outD->get_file()->get_path();
+        std::cout << "Folder selected: " <<  filename << std::endl;
+        m_dir_out = filename;
+        m_dir_outL.set_label(m_dir_out);
+        break;
+    }
+    case Gtk::RESPONSE_CANCEL:
+    {
+      std::cout << "Cancel clicked." << std::endl;
+       
+        break;
+    }
+    default:
+    {
+        std::cout << "Unexpected button clicked." << std::endl;
+        break;
+    }
+  }
+   delete m_dir_outD;
 }
 
 bool StoreChoiceWindow::get_recursivescan(){
@@ -109,7 +208,7 @@ MainWindow::MainWindow()
     m_button_select.set_margin_end(20);
     m_button_select.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_button_clicked_select));
         
-    m_button_create.add_label("Create Store");
+    m_button_create.add_label("Create DataStore");
     m_button_create.set_margin_end(20);
     m_button_create.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_button_clicked_create));
 
