@@ -570,7 +570,7 @@ void OpenAssistant::on_select_dir(){
     auto filter_db = Gtk::FileFilter::create();
     filter_db->set_name("dbfiles");
     filter_db->add_pattern("*.db");
-    m_files->add_filter(filter_db);
+//    m_files->add_filter(filter_db);
   
     m_files->add_button("_Cancel", Gtk::RESPONSE_CANCEL);
     m_files->add_button("_Open", Gtk::RESPONSE_OK);
